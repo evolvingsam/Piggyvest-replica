@@ -16,9 +16,9 @@ RUN npx tailwindcss -i ./input.css -o ./dist/output.css --minify
 
 # ---------- Final Stage ----------
 FROM nginx:alpine
-
 # Copy static files
-COPY --from=builder /app/dist /usr/share/nginx/html/css
+COPY ./css /usr/share/nginx/html/css
+COPY --from=builder /app/dist/output.css /usr/share/nginx/html/output.css
 COPY ./index.html /usr/share/nginx/html/
 COPY ./sign.html /usr/share/nginx/html/
 COPY ./sign_in_account.html /usr/share/nginx/html/

@@ -1,52 +1,32 @@
-name: Build, Push, and Deploy to Azure VM
+name: Build and Deploy to Azure VM (No Docker Hub)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.AZURE_VM_SSH_KEY }}
 
-      - name: Install dependencies
-        run: npm install
+    - name: Copy project to VM
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_IP }} "rm -rf ~/app && mkdir -p ~/app"
+        scp -r ./* ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_IP }}:~/app
 
-      - name: Build Tailwind CSS
-        run: npx tailwindcss -i ./input.css -o ./output.css --minify
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: evolvingsam/myapp:latest
-
-      - name: Deploy to Azure VM over SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.AZURE_VM_IP }}
-          username: ${{ secrets.AZURE_VM_USERNAME }}
-          key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          script: |
-            docker pull evolvingsam/myapp:latest
-            docker stop myapp || true
-            docker rm myapp || true
-            docker run -d -p 80:80 --name myapp evolvingsam/myapp:latest
+    - name: Build and Run Docker on VM
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_IP }} << 'EOF'
+          cd ~/app
+          docker stop app-container || true && docker rm app-container || true
+          docker build -t my-app .
+          docker run -d --name app-container -p 80:80 my-app
+        EOF
